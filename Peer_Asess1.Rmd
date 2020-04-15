@@ -1,0 +1,188 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown for Course Project 1  
+Assignment submitted by Miranda L. Gardner  
+
+### Read csv file in and inspect data
+
+```{r}
+#READ CSV AND EXAMINE STRUCTURE 
+all_data <- read.csv("activity.csv", stringsAsFactors = F, header = T)
+str(all_data)
+
+```
+
+
+
+### What is the mean number of steps taken daily? 
+Note: Ignore missing data reported as NA 
+
+```{r}
+#LOAD LIBRARY FOR PIPES, GROUPING AND SUMMARIZE FOR TOTAL STEPS, MEAN STEPS AND MEDIAN BY DAY
+library(dplyr)
+library(knitr)
+
+df1 <- all_data %>%
+  group_by(date) %>%
+  summarize(total_steps = sum(steps, na.rm = T), 
+            mean_steps = mean(steps, na.rm = T), 
+            median_steps = median(steps, na.rm = T))
+head(df1)
+```
+
+
+#### Histogram of Total Number of Steps Taken Daily
+
+```{r}
+#LOAD LIBRARY TO CREATE HISTOGRAM
+library(ggplot2)
+ggplot(df1, aes(x= total_steps)) + geom_histogram(color = "black", fill = "magenta") +
+  labs(x = "Total Number of Steps Taken Per Day", y = "Number of Days Total Steps Taken") +
+  theme_bw() +
+  theme(text = element_text(family = "sans", face = "bold", color = "black"), 
+        axis.title = element_text(size = 14)
+        ) 
+```
+
+
+
+#### Report the Mean and Median Number of Steps Taken Per Day  
+
+The mean number of steps taken per day:
+```{r}
+df2 <- df1 %>%
+  select(date, mean_steps)
+as.data.frame(df2)
+```
+
+
+The median number of steps taken per day:
+```{r}
+df3 <- df1 %>%
+  select(date, median_steps)
+as.data.frame(df3)
+```
+
+
+### What is the average daily activity pattern?
+
+```{r}
+#GROUP DATA BY INTERVAL AND CALC MEAN NUMBER OF STEPS
+
+df4 <- all_data %>%
+  group_by(interval) %>%
+  summarize(mean_steps = mean(steps, na.rm = T))
+df4
+#FIND MAX MEAN STEPS TO FIND THE INTERVAL THAT MAX OCCURS
+max <- max(df4$mean_steps)
+max_interval <- df4$interval[df4$mean_steps == max]
+max_rd = round(max, digits = 3)
+#PLOT DATA
+ ggplot(df4, aes(x=interval, y=mean_steps)) +
+  geom_line(col = "red") + 
+   labs(x = "Daily Time Interval", y = "Average number of steps taken", 
+        title  = "Average Number of Steps Taken Over Interval") +
+   theme_classic() +
+   theme(text = element_text(family = "sans", color = "black", face = "bold"), 
+         plot.title = element_text(hjust = 0.5)
+         )
+```
+
+#### Time Interval for Maximum Activity
+The time interval that, on average, the maximum number of  `r max_rd ` steps occurs is: `r max_interval`
+
+
+### Imputing Missing Values
+
+```{r}
+#ADD UP TOTAL NUMBER OF MISSING VALUES
+num_na <- sum(is.na(all_data))
+```
+
+#### Number of Missing Values
+The total number of missing values is `r num_na`
+
+```{r}
+#FIND INTERVAL MATCH FROM df4 TO all_data & USE mean_steps TO REPLACE NA
+impute_match <- df4$mean_steps[match(all_data$interval, df4$interval)]
+```
+
+
+```{r}
+#CREATE A NEW DATASET BY REPLACING NAs WITH MEAN FROM THE INTERVAL 
+all_data_imputed <- transform(all_data, steps = ifelse(is.na(all_data$steps), yes = impute_match, no = all_data$steps))
+```
+
+
+```{r}
+#GROUP DATA BY DATE, SUM DATA & CREATE HISTOGRAM OF IMPUTED DATA
+imp_data <- all_data_imputed %>%
+  group_by(date) %>%
+  summarize(total_steps = sum(steps, na.rm = T), 
+            mean_steps = mean(steps, na.rm = T), 
+            median_steps = median(steps, na.rm = T))
+head(imp_data)
+
+ggplot(imp_data, aes(x= total_steps)) + 
+  geom_histogram(color = "black", fill = "purple4") +
+  labs(x = "Total Number of Steps Taken Per Day", y = "Number of Days Total Steps Taken") +
+  theme_bw() +
+  theme(text = element_text(family = "sans", face = "bold", color = "black"), 
+        axis.title = element_text(size = 14)
+        ) 
+
+```
+
+#### Report the Mean and Median Number of Steps Taken Per Day Post-Imputation
+
+The mean number of steps taken per day:
+```{r}
+imp_data2 <- imp_data %>%
+  select(date, mean_steps)
+as.data.frame(imp_data2)
+```
+
+
+The median number of steps taken per day:
+```{r}
+imp_data3 <- imp_data %>%
+  select(date, median_steps)
+as.data.frame(imp_data3)
+```
+
+
+The mean and median from the imputed dataset differs from the original calculations but only on the dates where 'NA' was reported for the full day. There are still quite a bit of 0's (no activity) that are further influencing the data.
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+#ADD NEW COLUMN WEEKDAY TO TAG DATE AS WD OR WEN
+all_data_imputed$day_of_week <- weekdays(as.Date(all_data_imputed$date))
+all_data_imputed$day_type <- ifelse (all_data_imputed$day_of_week == "Saturday" | 
+                                       all_data_imputed$day_of_week =="Sunday",
+                                     "weekend", "weekday")
+#GROUP DATA BY INTERVAL
+activity_by_date <- aggregate(steps~interval + day_type, all_data_imputed, mean)
+
+#LINE SERIES PLOT - FACET WRAP ON day_type
+
+ggplot(activity_by_date, aes(x = interval, y = steps, color = day_type)) +
+  geom_line() +
+  facet_wrap(~day_type, ncol = 1, nrow = 2) +
+  scale_color_manual(values = c("red", "gray60")) +
+   labs(x = "Daily Time Interval", y = "Average number of steps taken",
+        title  = "Average Number of Steps By Type of Day", color = "Type of Day") +
+   theme_bw() +
+   theme(text = element_text(family = "sans", color = "black", face = "bold"),
+         plot.title = element_text(hjust = 0.5)
+         )
+```
